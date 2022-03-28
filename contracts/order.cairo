@@ -118,7 +118,7 @@ end
 
 
 func update_stored_order{syscall_ptr : felt}(
-    account_id : felt, slot_id : felt, actual_exchange: felt, order : Order):
+     order : Order, actual_exchange: felt):
     let (local old_order) = account_order.read(account_id=order.account_id, slot_num=order.slot_id)
     let (local new_order): StoredOrder
 
@@ -133,6 +133,6 @@ func update_stored_order{syscall_ptr : felt}(
         new_order.nonce = new_order.nonce + 1
     end
 
-    account_order.write(account_id=account_id, slot_num=slot_id, order=new_order)
+    account_order.write(account_id=order.account_id, slot_num=order.slot_id, order=new_order)
     return ()
 end

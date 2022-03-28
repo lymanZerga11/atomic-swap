@@ -52,36 +52,59 @@ end
 # Swaps tokens between the given account and the pool.
 func do_swap{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr}(
     residues: (felt, felt),
-    is_refresh_orders: (felt, felt)
+    is_refresh_orders: (felt, felt),
     maker : Order*,
     taker : Order* ):
-    # Get pool balance.
-    let (local amm_from_balance) = get_pool_token_balance(token_type=token_from)
-    let (local amm_to_balance) = get_pool_token_balance(token_type=token_to)
 
-    # Calculate swap amount.
-    let (local amount_to, _) = unsigned_div_rem(
-        amm_to_balance * amount_from, amm_from_balance + amount_from)
+    if maker.is_sell == 0 :
+        let token_1 = op.tx.maker.quote_token_id
+    else:
+        let token_1 = op.tx.maker.base_token_id
+    end
+    if taker.is_sell == 0 :
+        let token_2 = op.tx.taker.quote_token_id
+    else:
+        let token_2 = op.tx.taker.base_token_id
+    end
 
-    # Update token_from balances.
-    modify_account_balance(account_id=account_id, token_type=token_from, amount=-amount_from)
-    set_pool_token_balance(token_type=token_from, balance=amm_from_balance + amount_from)
+    # calculate exchanged amounts.
+    let (local actual_exchange1, local actual_exchange2) = calculate_actual_exchanged_amounts(
+        residues=residues,is_refresh_orders=is_refresh_orders, maker=maker, taker=taker)
 
-    # Update token_to balances.
-    modify_account_balance(account_id=account_id, token_type=token_to, amount=amount_to)
-    set_pool_token_balance(token_type=token_to, balance=amm_to_balance - amount_to)
-    return (amount_to=amount_to)
+    if maker.is_sell != 0:
+        let actual_exchanged_amount = actual_exchanged_amount1
+    else:
+        let actual_exchanged_amount = actual_exchanged_amount2
+    end
+
+    # Update maker stored order.
+    update_stored_order(order=maker, actual_exchange=actual_exchanged_amount)
+    update_stored_order(account_id=account_id, token_type=token_1, amount=-actual_exchanged_amount)
+    # Update maker token balances.
+    update_stored_order(account_id=account_id, token_type=token_1, amount=-actual_exchange1)
+    update_stored_order(account_id=account_id, token_type=token_2, amount=actual_exchange2)
+
+    # Update taker stored order.
+    update_stored_order(order=taker, actual_exchange=actual_exchanged_amount)
+    update_stored_order(account_id=account_id, token_type=token_2, amount=-amount_from)
+    # Update taker token balances.
+    modify_account_balance(account_id=account_id, token_type=token_2, amount=-actual_exchange2)
+    modify_account_balance(account_id=account_id, token_type=token_1, amount=actual_exchange1)
+
+    return ()
 end
 
 func calculate_actual_exchanged_amounts(
-    residues: (felt, felt)
-    is_refresh_orders: (felt, felt)
+    residues: (felt, felt),
+    is_refresh_orders: (felt, felt),
+    maker : Order*,
+    taker : Order*
 ) ->(actual_exchanged_amount1: felt, actual_exchanged_amount2: felt) :
-    let (local precision_magnified) = 10 ** TOKEN_MAX_PRECISION;
-    if residue1 == 0 || is_refresh_order1 == 1:
+    let (local precision_magnified) = 10 ** TOKEN_MAX_PRECISION
+    if residues[0] == 0 || is_refresh_order[0] == 1:
         let residue1 = maker.amount
     end
-    if residue2 == 0 || is_refresh_order2 == 1:
+    if residues[1] == 0 || is_refresh_order[1] == 1:
         let residue2 = taker.amount
     end
 
@@ -92,23 +115,23 @@ func calculate_actual_exchanged_amounts(
             let amount1 = residue1
             let amount2 = residue1
                 .checked_mul(&maker.price)
-                .checked_div(&precision_magnified
+                .checked_div(&precision_magnified)
         else:
             let amount1 = residue2
             let amount2 = residue2
                 .checked_mul(&maker.price)
-                .checked_div(&precision_magnified
+                .checked_div(&precision_magnified)
         end
     else:
         if assert_le(residue1, residue2):
             let amount1 = residue1
                 .checked_mul(&maker.price)
-                .checked_div(&precision_magnified
+                .checked_div(&precision_magnified)
             let amount2 = residue1
         else:
             let amount1 = residue2
                 .checked_mul(&maker.price)
-                .checked_div(&precision_magnified
+                .checked_div(&precision_magnified)
             let amount2 = residue2
         end
     end
